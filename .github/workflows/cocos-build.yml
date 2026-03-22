@@ -7,6 +7,10 @@ on:
         description: '项目名称，用于区分产物'
         required: true
         type: string
+      project_path:
+        description: '项目在仓库中的子目录路径'
+        required: true
+        type: string
     secrets:
       OSS_ACCESS_KEY_ID:
         required: true
@@ -52,15 +56,15 @@ jobs:
           $exe = Get-ChildItem "${{ env.COCOS_PATH }}" `
             -Filter "CocosCreator.exe" -Recurse | Select-Object -First 1
           & $exe.FullName `
-            --project "${{ github.workspace }}" `
-            --build "configPath=${{ github.workspace }}/build-config/wechat.json"
+            --project "${{ github.workspace }}/${{ inputs.project_path }}" `
+            --build "configPath=${{ github.workspace }}/${{ inputs.project_path }}/build-config/wechat.json"
         shell: powershell
         timeout-minutes: 20
 
       - name: 打包并上传 OSS
         run: |
           $name = "${{ inputs.project_name }}-wechat-$(Get-Date -Format 'yyyyMMddHHmmss')"
-          Compress-Archive -Path "build/wechatgame/*" `
+          Compress-Archive -Path "${{ inputs.project_path }}/build/wechatgame/*" `
             -DestinationPath "$name.zip"
 
           Invoke-WebRequest `
@@ -112,16 +116,16 @@ jobs:
           $exe = Get-ChildItem "${{ env.COCOS_PATH }}" `
             -Filter "CocosCreator.exe" -Recurse | Select-Object -First 1
           & $exe.FullName `
-            --project "${{ github.workspace }}" `
-            --build "configPath=${{ github.workspace }}/build-config/web-mobile.json"
+            --project "${{ github.workspace }}/${{ inputs.project_path }}" `
+            --build "configPath=${{ github.workspace }}/${{ inputs.project_path }}/build-config/web-mobile.json"
         shell: powershell
         timeout-minutes: 20
 
       - name: 内联成单 HTML
         run: |
           New-Item -ItemType Directory -Force -Path dist
-          node scripts/inline.js `
-            --input build/web-mobile/index.html `
+          node "${{ github.workspace }}/${{ inputs.project_path }}/scripts/inline.js" `
+            --input "${{ inputs.project_path }}/build/web-mobile/index.html" `
             --output dist/ad.html `
             --size-limit 4096
         shell: powershell
