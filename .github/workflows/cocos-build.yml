@@ -1,0 +1,149 @@
+name: Cocos Build (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      project_name:
+        description: '项目名称，用于区分产物'
+        required: true
+        type: string
+    secrets:
+      OSS_ACCESS_KEY_ID:
+        required: true
+      OSS_ACCESS_KEY_SECRET:
+        required: true
+      OSS_BUCKET:
+        required: true
+      OSS_ENDPOINT:
+        required: true
+      OSS_COCOS_INSTALLER_URL:
+        required: true
+
+env:
+  COCOS_VERSION: 3.8.8
+  COCOS_PATH: C:\CocosCreator
+
+jobs:
+  build-wechat:
+    name: 微信小游戏包
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 缓存 Cocos Creator
+        uses: actions/cache@v4
+        id: cocos-cache
+        with:
+          path: ${{ env.COCOS_PATH }}
+          key: cocos-${{ env.COCOS_VERSION }}-windows
+
+      - name: 下载并解压 Cocos Creator
+        if: steps.cocos-cache.outputs.cache-hit != 'true'
+        run: |
+          Invoke-WebRequest -Uri "${{ secrets.OSS_COCOS_INSTALLER_URL }}" `
+            -OutFile "CocosCreator.zip"
+          Expand-Archive -Path "CocosCreator.zip" `
+            -DestinationPath "${{ env.COCOS_PATH }}" -Force
+        shell: powershell
+
+      - name: 构建微信小游戏
+        run: |
+          $exe = Get-ChildItem "${{ env.COCOS_PATH }}" `
+            -Filter "CocosCreator.exe" -Recurse | Select-Object -First 1
+          & $exe.FullName `
+            --project "${{ github.workspace }}" `
+            --build "configPath=${{ github.workspace }}/build-config/wechat.json"
+        shell: powershell
+        timeout-minutes: 20
+
+      - name: 打包并上传 OSS
+        run: |
+          $name = "${{ inputs.project_name }}-wechat-$(Get-Date -Format 'yyyyMMddHHmmss')"
+          Compress-Archive -Path "build/wechatgame/*" `
+            -DestinationPath "$name.zip"
+
+          Invoke-WebRequest `
+            -Uri "https://gosspublic.alicdn.com/ossutil/1.7.17/ossutil64.exe" `
+            -OutFile "ossutil.exe"
+
+          .\ossutil.exe config `
+            -e "${{ secrets.OSS_ENDPOINT }}" `
+            -i "${{ secrets.OSS_ACCESS_KEY_ID }}" `
+            -k "${{ secrets.OSS_ACCESS_KEY_SECRET }}"
+
+          .\ossutil.exe cp "$name.zip" `
+            "oss://${{ secrets.OSS_BUCKET }}/builds/${{ inputs.project_name }}/wechat/"
+
+          Write-Host "📦 下载链接："
+          Write-Host "https://${{ secrets.OSS_BUCKET }}.${{ secrets.OSS_ENDPOINT }}/builds/${{ inputs.project_name }}/wechat/$name.zip"
+        shell: powershell
+
+  build-h5:
+    name: H5 单文件
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 缓存 Cocos Creator
+        uses: actions/cache@v4
+        id: cocos-cache
+        with:
+          path: ${{ env.COCOS_PATH }}
+          key: cocos-${{ env.COCOS_VERSION }}-windows
+
+      - name: 下载并解压 Cocos Creator
+        if: steps.cocos-cache.outputs.cache-hit != 'true'
+        run: |
+          Invoke-WebRequest -Uri "${{ secrets.OSS_COCOS_INSTALLER_URL }}" `
+            -OutFile "CocosCreator.zip"
+          Expand-Archive -Path "CocosCreator.zip" `
+            -DestinationPath "${{ env.COCOS_PATH }}" -Force
+        shell: powershell
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 构建 web-mobile
+        run: |
+          $exe = Get-ChildItem "${{ env.COCOS_PATH }}" `
+            -Filter "CocosCreator.exe" -Recurse | Select-Object -First 1
+          & $exe.FullName `
+            --project "${{ github.workspace }}" `
+            --build "configPath=${{ github.workspace }}/build-config/web-mobile.json"
+        shell: powershell
+        timeout-minutes: 20
+
+      - name: 内联成单 HTML
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          node scripts/inline.js `
+            --input build/web-mobile/index.html `
+            --output dist/ad.html `
+            --size-limit 4096
+        shell: powershell
+
+      - name: 上传 OSS
+        run: |
+          $name = "${{ inputs.project_name }}-ad-$(Get-Date -Format 'yyyyMMddHHmmss').html"
+          Copy-Item "dist/ad.html" "dist/$name"
+
+          Invoke-WebRequest `
+            -Uri "https://gosspublic.alicdn.com/ossutil/1.7.17/ossutil64.exe" `
+            -OutFile "ossutil.exe"
+
+          .\ossutil.exe config `
+            -e "${{ secrets.OSS_ENDPOINT }}" `
+            -i "${{ secrets.OSS_ACCESS_KEY_ID }}" `
+            -k "${{ secrets.OSS_ACCESS_KEY_SECRET }}"
+
+          .\ossutil.exe cp "dist/$name" `
+            "oss://${{ secrets.OSS_BUCKET }}/builds/${{ inputs.project_name }}/h5/" `
+            --meta "Content-Type:text/html"
+
+          Write-Host "🎮 预览链接："
+          Write-Host "https://${{ secrets.OSS_BUCKET }}.${{ secrets.OSS_ENDPOINT }}/builds/${{ inputs.project_name }}/h5/$name"
+        shell: powershell
