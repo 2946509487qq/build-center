@@ -124,9 +124,11 @@ jobs:
       - name: 内联成单 HTML
         run: |
           New-Item -ItemType Directory -Force -Path dist
-          node "${{ github.workspace }}/${{ inputs.project_path }}/scripts/inline.js" `
-            --input "${{ inputs.project_path }}/build/web-mobile/index.html" `
-            --output dist/ad.html `
+          $scriptPath = "${{ github.workspace }}\${{ inputs.project_path }}\scripts\inline.js"
+          $inputPath = "${{ github.workspace }}\${{ inputs.project_path }}\build\web-mobile\index.html"
+          node $scriptPath `
+            --input $inputPath `
+            --output dist\ad.html `
             --size-limit 4096
         shell: powershell
 
