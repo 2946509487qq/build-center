@@ -55,9 +55,16 @@ jobs:
         run: |
           $exe = Get-ChildItem "${{ env.COCOS_PATH }}" `
             -Filter "CocosCreator.exe" -Recurse | Select-Object -First 1
-          & $exe.FullName `
-            --project "${{ github.workspace }}/${{ inputs.project_path }}" `
-            --build "configPath=${{ github.workspace }}/${{ inputs.project_path }}/build-config/wechat.json"
+          $process = Start-Process -FilePath $exe.FullName `
+            -ArgumentList "--project `"${{ github.workspace }}/${{ inputs.project_path }}`" --build `"configPath=${{ github.workspace }}/${{ inputs.project_path }}/build-config/wechat.json`"" `
+            -Wait -PassThru -NoNewWindow
+          Write-Host "Exit code: $($process.ExitCode)"
+          $buildPath = "${{ github.workspace }}/${{ inputs.project_path }}/build/wechatgame"
+          if (-not (Test-Path $buildPath)) {
+            Write-Error "Build output not found: $buildPath"
+            exit 1
+          }
+          Write-Host "Build success: $buildPath"
         shell: powershell
         timeout-minutes: 20
 
@@ -115,9 +122,16 @@ jobs:
         run: |
           $exe = Get-ChildItem "${{ env.COCOS_PATH }}" `
             -Filter "CocosCreator.exe" -Recurse | Select-Object -First 1
-          & $exe.FullName `
-            --project "${{ github.workspace }}/${{ inputs.project_path }}" `
-            --build "configPath=${{ github.workspace }}/${{ inputs.project_path }}/build-config/web-mobile.json"
+          $process = Start-Process -FilePath $exe.FullName `
+            -ArgumentList "--project `"${{ github.workspace }}/${{ inputs.project_path }}`" --build `"configPath=${{ github.workspace }}/${{ inputs.project_path }}/build-config/web-mobile.json`"" `
+            -Wait -PassThru -NoNewWindow
+          Write-Host "Exit code: $($process.ExitCode)"
+          $buildPath = "${{ github.workspace }}/${{ inputs.project_path }}/build/web-mobile"
+          if (-not (Test-Path $buildPath)) {
+            Write-Error "Build output not found: $buildPath"
+            exit 1
+          }
+          Write-Host "Build success: $buildPath"
         shell: powershell
         timeout-minutes: 20
 
